@@ -16,7 +16,13 @@ def load_prediction_assets():
     data = load_data()
     preprocessor = build_preprocessor()
     preprocessor.fit(data.drop(columns=["charges"]))
-    model = load_model("artifacts/models/neural_network.h5")
+    model_path = (
+        Path(__file__).resolve().parent
+        / "artifacts"
+        / "models"
+        / "neural_network.h5"
+    )
+    model = load_model(model_path, compile=False)
     return data, preprocessor, model
 
 
