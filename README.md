@@ -47,6 +47,37 @@ Charges for a smoker with above average BMI are 2.15x higher than sample average
 3. Average charges for male customers are 9.94% higher than that for female customers.
 4. Insurance charges also vary by region, Southeast being the highest at $14,735.41
 
+## Modular project structure
+
+```text
+data/raw/                 Source datasets
+src/insurance_risk_assessment/
+  data.py                 Dataset loading and validation
+  preprocessing.py        Shared feature transformers
+  analysis.py             Exploratory data analysis plots
+  models.py               Neural network training and evaluation
+scripts/
+  run_eda.py              Generate EDA reports
+  train_neural_network.py Train and evaluate the neural network
+  train_linear_regression.py
+  train_classifiers.py
+artifacts/models/         Saved trained models
+reports/                  Generated plots
+page.py                   Streamlit application
+main.py                   Neural network training entry point
+```
+
+Run commands from the repository root:
+
+```bash
+pip install -r requirements.txt
+python main.py
+python scripts/run_eda.py
+python scripts/train_linear_regression.py
+python scripts/train_classifiers.py
+streamlit run page.py
+```
+
 
 
 

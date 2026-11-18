@@ -1,127 +1,73 @@
-import streamlit as st
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
 import pandas as pd
-import numpy as np
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.compose import ColumnTransformer
+import streamlit as st
 from keras.models import load_model
 
-model = load_model('./Model/model.h5')
+from insurance_risk_assessment.data import load_data
+from insurance_risk_assessment.preprocessing import build_preprocessor
 
-df=pd.read_csv('./insurance.csv')
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('cat', OneHotEncoder(), ['sex', 'smoker', 'region']),
-        ('num', StandardScaler(), ['age', 'bmi', 'children'])
-    ])
+@st.cache_resource
+def load_prediction_assets():
+    data = load_data()
+    preprocessor = build_preprocessor()
+    preprocessor.fit(data.drop(columns=["charges"]))
+    model = load_model("artifacts/models/neural_network.h5")
+    return data, preprocessor, model
 
-data = pd.read_csv('insurance.csv')
-X = data.drop('charges', axis=1)
-preprocessor.fit(X)
 
-def preprocess_data(data):
-    return preprocessor.transform(data)
+def bmi_category(bmi: float) -> str:
+    if bmi < 18.5:
+        return "underweight"
+    if bmi < 25:
+        return "healthy weight"
+    if bmi < 30:
+        return "overweight"
+    return "obese"
 
-def main():
-    st.title("Insurance Premium Prediction")
 
-    age = st.number_input("Age", min_value=0, max_value=120, value=30)
+def main() -> None:
+    st.set_page_config(page_title="Insurance Risk Assessment", layout="wide")
+    st.title("Insurance Risk Assessment")
+
+    data, preprocessor, model = load_prediction_assets()
+
+    age = st.number_input("Age", min_value=18, max_value=120, value=30)
     sex = st.selectbox("Sex", ["male", "female"])
-    height = st.number_input("Height (in m)", min_value=100, value=180)
-    weight = st.number_input("Weight (in kg)", min_value=50, value=70)
+    height_cm = st.number_input("Height (cm)", min_value=100, max_value=250, value=180)
+    weight_kg = st.number_input("Weight (kg)", min_value=30, max_value=300, value=70)
     children = st.number_input("Children", min_value=0, max_value=10, value=0)
     smoker = st.selectbox("Smoker", ["yes", "no"])
-    region = st.selectbox("Region", ["southwest", "southeast", "northwest", "northeast"])
-    income = st.number_input("Income (in ₹)", min_value=0, value=50000)
+    region = st.selectbox(
+        "Region", ["southwest", "southeast", "northwest", "northeast"]
+    )
 
-    prediction_button = st.button("Predict Insurance Charges")
+    bmi = weight_kg / ((height_cm / 100) ** 2)
 
-    bmi = weight/((height/100)*(height/100))
-
-    if prediction_button:
-        new_data = pd.DataFrame({
-            'age': [age],
-            'sex': [sex],
-            'bmi': [bmi],
-            'children': [children],
-            'smoker': [smoker],
-            'region': [region],
-            'income': [income]
-        })
-        new_data_transformed = preprocess_data(new_data)
-
-        prediction = model.predict(new_data_transformed)[0][0]
-
-        st.write("Predicted charges:", prediction)
-
-
-    st.markdown("### Learn how these factors that affect your premium \n  #### Smoking")  
-
-    smoker_data=df.groupby('smoker')['charges'].mean()
-    st.bar_chart(smoker_data)
-    smoker_average=df[df['smoker']=="yes"]['charges'].mean()
-    non_smoker_average=df[df['smoker']=="no"]['charges'].mean()
-
-    st.write("* Premiums for smokers are on average {:,.2f}".format(1+(smoker_average-non_smoker_average)/smoker_average),"times higher than non-smokers")    
-    st.markdown("#### BMI")
-    bmi_data=df.groupby('bmi')['charges'].mean()
-    st.bar_chart(bmi_data)
-
-    st.write("Your BMI: {:,.2f}".format(bmi))
-    mean_bmi=df['bmi'].mean()
-    high_bmi=df[df['bmi']>mean_bmi]['charges'].mean()
-    low_bmi=df[df['bmi']<mean_bmi]['charges'].mean()
-    
-    
-    st.write("* Average BMI : {:,.2f}".format(mean_bmi))
-
-    if bmi >=18.5 and bmi<=24.9:
-        st.write("* Your BMI falls in the healthy weight range")
-    elif bmi>=25.0 and bmi<=29.9:
-        st.write("* Your BMI falls in the overweight range")
-    elif bmi>=30.0:
-        st.write("* Your BMI falls in the obese weight range")
-    elif bmi<18.5:
-        st.write("* Your BMI falls in the underweight range")
-
-    st.write("* Premiums for people with BMI higher than the average BMI are {:,.2f}".format(1+(high_bmi-low_bmi)/high_bmi),"times higher than people with average or below average BMI")    
-
-
-    
-    st.markdown("#### Region")
-    region_data=df.groupby('region')['charges'].mean()
-    st.bar_chart(region_data)
-    
-    southWestMean=df[df['region']=='southwest']['charges'].mean()
-    southEastMean=df[df['region']=='southeast']['charges'].mean()
-    northWestMean=df[df['region']=='northwest']['charges'].mean()
-    northEastMean=df[df['region']=='northeast']['charges'].mean()
-    countryMean=df['charges'].mean()
-    charges={southWestMean:'Southwest',southEastMean:'Southeast',northWestMean:'Northwest',northEastMean:'Northeast'}
-
-    charge_list=charges.keys()
-
-    charge_max=max(charges.keys())
-
-    highestRegion=max(charge_list)  
-
-    st.write(" All averages are for Indian regions",
-        "\n * National average: ₹{:,.2f}  ".format(countryMean),
-        "\n * Southeast average: ₹{:,.2f}".format(charge_max),
-        "\n * Northeast average: ₹{:,.2f}".format(northEastMean),
-        "\n * Northwest average: ₹{:,.2f}".format(northWestMean),
-        "\n * Southwest average: ₹{:,.2f}".format(southWestMean),
-        "\n * Region with the highest average fees: ",charges.get(highestRegion),
+    if st.button("Predict insurance charges"):
+        applicant = pd.DataFrame(
+            {
+                "age": [age],
+                "sex": [sex],
+                "bmi": [bmi],
+                "children": [children],
+                "smoker": [smoker],
+                "region": [region],
+            }
         )
-    
-    st.markdown("#### Children")
-    customers_with_children=(df[df['children']>0]['charges'].mean()/df[df['children']==0]['charges'].mean()-1)*100
-    
-    children=df.groupby('children')['charges'].mean()
-    st.bar_chart(children)
-    st.write("* Average charges for customers without children: ₹{:,.2f}".format(df[df['children']==0]['charges'].mean()),
-      "\n * Average charges for customers with children: ₹{:,.2f}".format(df[df['children']>0]['charges'].mean()),
-      "\n * Difference in average charges for customers with children: +{:.2f}%".format(customers_with_children))
+        prediction = float(model.predict(preprocessor.transform(applicant), verbose=0)[0][0])
+        st.metric("Predicted charges", f"${prediction:,.2f}")
 
-if __name__ == '__main__':
+    st.subheader("Risk factors")
+    st.write(f"BMI: **{bmi:.2f}** ({bmi_category(bmi)})")
+    st.bar_chart(data.groupby("smoker")["charges"].mean())
+    st.bar_chart(data.groupby("region")["charges"].mean())
+    st.bar_chart(data.groupby("children")["charges"].mean())
+
+
+if __name__ == "__main__":
     main()
